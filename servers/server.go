@@ -29,15 +29,15 @@ func GetApp() *mux.Router {
 		log.Println("Upload Req: ", data)
 		store[key] = value
 
-		writer.WriteHeader(http.StatusOK)
+		writer.WriteHeader(http.StatusCreated)
 	}).Methods("POST")
 
 	// GET ALL KEYS
 	r.HandleFunc("/keys", func(writer http.ResponseWriter, request *http.Request) {
 		data := make(map[string][]string)
-		data["key"] = []string{}
+		data["keys"] = []string{}
 		for key := range store {
-			data["key"] = append(data["key"], key)
+			data["keys"] = append(data["keys"], key)
 		}
 		body, _ := json.Marshal(data)
 		writer.WriteHeader(http.StatusOK)

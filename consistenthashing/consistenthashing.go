@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -91,7 +92,7 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 	newNode := &ringMember{address: serverAddr, position: nodePos, next: next}
 	prev.next = newNode
 
-	err := ch.redistribute(next, newNode)
+	err := ch.redistribute(next, newNode, false)
 
 	if err != nil {
 		log.Println(err)
@@ -108,7 +109,7 @@ func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 		log.Println(err)
 		return err
 	}
-	err = ch.redistribute(prev.next, prev.next.next)
+	err = ch.redistribute(prev.next, prev.next.next, true)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -134,7 +135,7 @@ func (ch *ConsistentHashing) PrintTopology() {
 	}
 }
 
-func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember) error {
+func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRemoval bool) error {
 	resp, err := http.Get("http://" + from.address + ch.allKeysRoute)
 	if err != nil {
 		return err
@@ -144,18 +145,19 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember) erro
 	if err != nil {
 		return err
 	}
+	fmt.Println("redistributing: ", decodedResp, "to ", to)
 
 	var wg sync.WaitGroup
-	for _, key := range decodedResp.keys {
+	for _, key := range decodedResp.Keys {
 		keyId := ch.hashFunc(key)
-		if keyId < to.position {
+		if keyId < to.position || isRemoval {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup, key string, removeKeyRoute string, addKeyRoute string, getKeyRoute string) {
 				defer wg.Done()
 				client := &http.Client{}
 
 				// Get Key Val from fromMem
-				resp, err := client.Get("http://" + from.address + getKeyRoute + "?" + key)
+				resp, err := client.Get("http://" + from.address + getKeyRoute + "?key=" + key)
 				if err != nil {
 					log.Println(err)
 					return
@@ -165,11 +167,11 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember) erro
 					return
 				}
 				buf, err := io.ReadAll(resp.Body)
-				defer resp.Body.Close()
+				resp.Body.Close()
 				respBody := bytes.NewBuffer(buf)
 
 				// Add key val to toMem
-				resp, err = client.Post("http://"+from.address+addKeyRoute, resp.Header.Get("Content-Type"), respBody)
+				resp, err = client.Post("http://"+to.address+addKeyRoute, resp.Header.Get("Content-Type"), respBody)
 				if err != nil {
 					log.Println(err)
 					return
@@ -202,7 +204,7 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember) erro
 }
 
 type allKeysResponse struct {
-	keys []string
+	Keys []string `json:"keys"`
 }
 
 func findInRing(keyId int, member *ringMember) (*ringMember, error) {
@@ -225,25 +227,42 @@ func findInRing(keyId int, member *ringMember) (*ringMember, error) {
 	return nil, errors.New("no node with key Id")
 }
 
-// Method should return the node where the last node had a value smaller than our current value but next node has
-// a larger value
+// Find the first node larger than pos? return the previous?
 func findInsertionForPos(pos int, member *ringMember) *ringMember {
-	res := member
-	prevNode := member
+	var prevNode *ringMember = nil
 	currNode := member
-	firstIterDone := false
-	for currNode != member || !firstIterDone {
-		if !firstIterDone {
-			firstIterDone = true
+	isFirstIterDone := true
+	for currNode != member || isFirstIterDone {
+		if isFirstIterDone {
+			isFirstIterDone = false
 		}
 
 		if pos > currNode.position {
-			res = prevNode
+			if prevNode == nil {
+				return getLastNode(member)
+			}
+			return currNode
 		}
-
 		prevNode = currNode
 		currNode = currNode.next
 	}
 
-	return res
+	// By now we would have done a full loop, and previous would hold one before the ringstart
+	return prevNode
+}
+
+func getLastNode(member *ringMember) *ringMember {
+	var lastNode *ringMember
+	node := member
+	isFirstIteration := true
+
+	for node != member || isFirstIteration {
+		if isFirstIteration {
+			isFirstIteration = false
+		}
+
+		lastNode = node
+		node = node.next
+	}
+	return lastNode
 }
