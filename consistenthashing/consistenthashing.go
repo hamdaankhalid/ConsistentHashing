@@ -57,7 +57,7 @@ func (ch *ConsistentHashing) GetShard(shardKey string) (string, error) {
 		return "", errors.New("no members in cluster")
 	}
 	keyId := ch.hashFunc(shardKey) % ch.ringSize
-	prev := findPrevInRing(keyId, gt, ch.ringStart)
+	prev := findInsertionForPos(keyId, ch.ringStart)
 	return prev.next.address, nil
 }
 
@@ -79,10 +79,12 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 		return nil
 	}
 
-	log.Println("Adding new server into ring")
+	log.Println("Adding new server into ring, new server pos: ", nodePos)
 
 	// get first node with position greater than nodePos
-	prev := findPrevInRing(nodePos, gt, ch.ringStart)
+	prev := findInsertionForPos(nodePos, ch.ringStart)
+
+	log.Println("Inserting new node after: ", prev)
 
 	// insert new node between prev and previous' next!
 	next := prev.next
@@ -92,6 +94,7 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 	err := ch.redistribute(next, newNode)
 
 	if err != nil {
+		log.Println(err)
 		return err
 	}
 
@@ -100,9 +103,14 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 
 func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 	nodePos := ch.hashFunc(serverAddr) % ch.ringSize
-	prev := findPrevInRing(nodePos, eq, ch.ringStart)
-	err := ch.redistribute(prev.next, prev.next.next)
+	prev, err := findInRing(nodePos, ch.ringStart)
 	if err != nil {
+		log.Println(err)
+		return err
+	}
+	err = ch.redistribute(prev.next, prev.next.next)
+	if err != nil {
+		log.Println(err)
 		return err
 	}
 
@@ -110,6 +118,20 @@ func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 	prev.next = prev.next.next
 
 	return nil
+}
+
+func (ch *ConsistentHashing) PrintTopology() {
+	currNode := ch.ringStart
+	firstIterDone := false
+	for currNode != ch.ringStart || !firstIterDone {
+		if !firstIterDone {
+			firstIterDone = true
+		}
+
+		log.Println("Ring Member: ", currNode)
+
+		currNode = currNode.next
+	}
 }
 
 func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember) error {
@@ -183,20 +205,8 @@ type allKeysResponse struct {
 	keys []string
 }
 
-func lt(a int, b int) bool {
-	return a < b
-}
-
-func gt(a int, b int) bool {
-	return a > b
-}
-
-func eq(a int, b int) bool {
-	return a == b
-}
-
-func findPrevInRing(keyId int, condFunc func(int, int) bool, member *ringMember) *ringMember {
-	var prevNode *ringMember = member
+func findInRing(keyId int, member *ringMember) (*ringMember, error) {
+	prevNode := member
 	currNode := member
 	firstIterDone := false
 	for currNode != member || !firstIterDone {
@@ -204,13 +214,36 @@ func findPrevInRing(keyId int, condFunc func(int, int) bool, member *ringMember)
 			firstIterDone = true
 		}
 
-		if condFunc(keyId, currNode.position) {
-			return prevNode
+		if keyId == currNode.position {
+			return prevNode, nil
 		}
 
 		prevNode = currNode
 		currNode = currNode.next
 	}
 
-	return prevNode
+	return nil, errors.New("no node with key Id")
+}
+
+// Method should return the node where the last node had a value smaller than our current value but next node has
+// a larger value
+func findInsertionForPos(pos int, member *ringMember) *ringMember {
+	res := member
+	prevNode := member
+	currNode := member
+	firstIterDone := false
+	for currNode != member || !firstIterDone {
+		if !firstIterDone {
+			firstIterDone = true
+		}
+
+		if pos > currNode.position {
+			res = prevNode
+		}
+
+		prevNode = currNode
+		currNode = currNode.next
+	}
+
+	return res
 }

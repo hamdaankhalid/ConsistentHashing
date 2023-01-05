@@ -31,6 +31,8 @@ func New() *mux.Router {
 
 	// UPLOAD KEY VAL
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
+		log.Println("Upload Key Request")
+
 		buf, err := io.ReadAll(request.Body)
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -39,14 +41,13 @@ func New() *mux.Router {
 
 		reqCopy := io.NopCloser(bytes.NewBuffer(buf))
 		request.Body = reqCopy
-		
+
 		data := make(map[string]string)
 
 		_ = json.Unmarshal(buf, &data)
 
-		log.Println(data)
-
 		shard, err := hmp.GetShard(data["key"])
+
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
@@ -59,6 +60,8 @@ func New() *mux.Router {
 
 	// GET BY KEY
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
+		log.Println("Get Key Request")
+
 		key := request.URL.Query()["key"][0]
 		log.Println(key)
 
@@ -76,6 +79,8 @@ func New() *mux.Router {
 
 	// Add member
 	r.HandleFunc("/add-member", func(writer http.ResponseWriter, request *http.Request) {
+		log.Println("Add member Request")
+
 		servers := request.URL.Query()["srv"]
 		for _, server := range servers {
 			err := hmp.AddMember(server)
@@ -85,15 +90,23 @@ func New() *mux.Router {
 			}
 		}
 
+		log.Println("----Topology----")
+		hmp.PrintTopology()
+
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
 
 	// Remove member
 	r.HandleFunc("/remove-member", func(writer http.ResponseWriter, request *http.Request) {
+		log.Println("Remove member Request")
+
 		servers := request.URL.Query()["srv"]
 		for _, server := range servers {
 			hmp.RemoveMember(server)
 		}
+
+		log.Println("----Topology----")
+		hmp.PrintTopology()
 
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
