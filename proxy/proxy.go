@@ -6,28 +6,15 @@ import (
 	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/hamdaankhalid/consistenthashing/consistenthashing"
-	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
+	"sync"
 )
 
-func New() *mux.Router {
+func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 	r := mux.NewRouter()
-	hash := func(s string) int {
-		h := fnv.New32a()
-		h.Write([]byte(s))
-		return int(h.Sum32())
-	}
-
-	hmp := consistenthashing.New(
-		"/keys",
-		"/key",
-		"/key",
-		"/key",
-		hash,
-		360,
-	)
+	var hmpMu sync.Mutex
 
 	// UPLOAD KEY VAL
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
@@ -45,9 +32,9 @@ func New() *mux.Router {
 		data := make(map[string]string)
 
 		_ = json.Unmarshal(buf, &data)
-
+		hmpMu.Lock()
 		shard, err := hmp.GetShard(data["key"])
-
+		hmpMu.Unlock()
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
@@ -64,9 +51,9 @@ func New() *mux.Router {
 
 		key := request.URL.Query()["key"][0]
 		log.Println(key)
-
+		hmpMu.Lock()
 		shard, err := hmp.GetShard(key)
-
+		hmpMu.Unlock()
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
@@ -82,6 +69,7 @@ func New() *mux.Router {
 		log.Println("Add member Request")
 
 		servers := request.URL.Query()["srv"]
+		hmpMu.Lock()
 		for _, server := range servers {
 			err := hmp.AddMember(server)
 			if err != nil {
@@ -92,7 +80,7 @@ func New() *mux.Router {
 
 		log.Println("----Topology----")
 		hmp.PrintTopology()
-
+		hmpMu.Unlock()
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
 
@@ -101,12 +89,16 @@ func New() *mux.Router {
 		log.Println("Remove member Request")
 
 		servers := request.URL.Query()["srv"]
+		hmpMu.Lock()
+
 		for _, server := range servers {
 			hmp.RemoveMember(server)
 		}
 
 		log.Println("----Topology----")
 		hmp.PrintTopology()
+
+		hmpMu.Unlock()
 
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
@@ -122,7 +114,6 @@ func proxyRequest(w http.ResponseWriter, req *http.Request, newUrl string) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	proxyReq.Header = req.Header
 	proxyReq.Header = make(http.Header)
 

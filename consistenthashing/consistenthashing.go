@@ -11,24 +11,15 @@ import (
 	"sync"
 )
 
-// ringMember is a glorified circularly ringed list
-type ringMember struct {
-	address string
-	// position is decided by hashing address
-	position int
-	next     *ringMember
-}
-
 // HashingFunc lets me compose ConsistentHashing struct object with a plethora of different hashing algorithms
 type HashingFunc func(string) int
 
 type ConsistentHashing struct {
 	// These routes are the endpoints exposed by every server in cluster to move data around during redistribution
 	allKeysRoute, removeKeyRoute, addKeyRoute, getKeyRoute string
-
-	hashFunc  HashingFunc
-	ringSize  int
-	ringStart *ringMember
+	hashFunc                                               HashingFunc
+	ringSize                                               int
+	ring                                                   *ring
 }
 
 func New(allKeysRoute string,
@@ -45,7 +36,7 @@ func New(allKeysRoute string,
 		addKeyRoute:    addKeyRoute,
 		hashFunc:       hashFunc,
 		ringSize:       ringSize,
-		ringStart:      nil,
+		ring:           &ring{size: ringSize},
 	}
 }
 
@@ -54,12 +45,12 @@ GetShard will find the first server where the shardKey's mapped keyId is greater
 next server while satisfying circular ring constraints
 */
 func (ch *ConsistentHashing) GetShard(shardKey string) (string, error) {
-	if ch.ringStart == nil {
-		return "", errors.New("no members in cluster")
-	}
 	keyId := ch.hashFunc(shardKey) % ch.ringSize
-	prev := findInsertionForPos(keyId, ch.ringStart)
-	return prev.next.address, nil
+	owner, err := ch.ring.getOwner(keyId)
+	if err != nil {
+		return "", err
+	}
+	return owner.address, nil
 }
 
 /*
@@ -72,25 +63,19 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 	log.Println("Adding new server to cluster members")
 
 	nodePos := ch.hashFunc(serverAddr) % ch.ringSize
-	if ch.ringStart == nil {
-		firstNode := &ringMember{address: serverAddr, position: nodePos}
-		firstNode.next = firstNode
-		ch.ringStart = firstNode
-		log.Println("Head added")
-		return nil
-	}
+	newNode := &ringMember{address: serverAddr, position: nodePos}
 
 	log.Println("Adding new server into ring, new server pos: ", nodePos)
 
-	// get first node with position greater than nodePos
-	prev := findInsertionForPos(nodePos, ch.ringStart)
+	// Insert in ring, and get the next node after it post-insertion
+	newInsertedAt := ch.ring.insert(newNode)
 
-	log.Println("Inserting new node after: ", prev)
+	if ch.ring.numServers() == 1 {
+		return nil
+	}
+	next := ch.ring.getNextRingMember(newInsertedAt)
 
-	// insert new node between prev and previous' next!
-	next := prev.next
-	newNode := &ringMember{address: serverAddr, position: nodePos, next: next}
-	prev.next = newNode
+	log.Printf("%v inserted at %d redistributing from server %v \n", newNode, newInsertedAt, next)
 
 	err := ch.redistribute(next, newNode, false)
 
@@ -103,35 +88,36 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 }
 
 func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
-	nodePos := ch.hashFunc(serverAddr) % ch.ringSize
-	prev, err := findInRing(nodePos, ch.ringStart)
+	removeIdx := ch.ring.find(serverAddr)
+	if removeIdx == -1 {
+		return errors.New("so server with address in cluster")
+	}
+
+	// move everything from current node into the next node
+	currNode, err := ch.ring.get(removeIdx)
 	if err != nil {
-		log.Println(err)
 		return err
 	}
-	err = ch.redistribute(prev.next, prev.next.next, true)
+	successor := ch.ring.getNextRingMember(removeIdx)
+
+	err = ch.redistribute(currNode, successor, true)
 	if err != nil {
 		log.Println(err)
 		return err
 	}
 
-	// now remove prev.next
-	prev.next = prev.next.next
+	// now remove currNode from the ring
+	err = ch.ring.remove(removeIdx)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func (ch *ConsistentHashing) PrintTopology() {
-	currNode := ch.ringStart
-	firstIterDone := false
-	for currNode != ch.ringStart || !firstIterDone {
-		if !firstIterDone {
-			firstIterDone = true
-		}
-
-		log.Println("Ring Member: ", currNode)
-
-		currNode = currNode.next
+	for idx, member := range ch.ring.partitionsRing {
+		log.Printf("idx %d: server %s with pos %d\n", idx, member.address, member.position)
 	}
 }
 
@@ -205,64 +191,4 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 
 type allKeysResponse struct {
 	Keys []string `json:"keys"`
-}
-
-func findInRing(keyId int, member *ringMember) (*ringMember, error) {
-	prevNode := member
-	currNode := member
-	firstIterDone := false
-	for currNode != member || !firstIterDone {
-		if !firstIterDone {
-			firstIterDone = true
-		}
-
-		if keyId == currNode.position {
-			return prevNode, nil
-		}
-
-		prevNode = currNode
-		currNode = currNode.next
-	}
-
-	return nil, errors.New("no node with key Id")
-}
-
-// Find the first node larger than pos? return the previous?
-func findInsertionForPos(pos int, member *ringMember) *ringMember {
-	var prevNode *ringMember = nil
-	currNode := member
-	isFirstIterDone := true
-	for currNode != member || isFirstIterDone {
-		if isFirstIterDone {
-			isFirstIterDone = false
-		}
-
-		if pos > currNode.position {
-			if prevNode == nil {
-				return getLastNode(member)
-			}
-			return currNode
-		}
-		prevNode = currNode
-		currNode = currNode.next
-	}
-
-	// By now we would have done a full loop, and previous would hold one before the ringstart
-	return prevNode
-}
-
-func getLastNode(member *ringMember) *ringMember {
-	var lastNode *ringMember
-	node := member
-	isFirstIteration := true
-
-	for node != member || isFirstIteration {
-		if isFirstIteration {
-			isFirstIteration = false
-		}
-
-		lastNode = node
-		node = node.next
-	}
-	return lastNode
 }

@@ -5,11 +5,14 @@ import (
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
+	"sync"
 )
 
 var store = map[string]string{}
 
-type uploadreq struct {
+var mu sync.Mutex
+
+type uploadReq struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
@@ -20,13 +23,15 @@ func GetApp() *mux.Router {
 
 	// UPLOAD KEY VAL
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
-		data := uploadreq{}
+		data := uploadReq{}
 		_ = json.NewDecoder(request.Body).Decode(&data)
 
 		key := data.Key
 		value := data.Value
 
 		log.Println("Upload Req: ", data)
+		mu.Lock()
+		defer mu.Unlock()
 		store[key] = value
 
 		writer.WriteHeader(http.StatusCreated)
@@ -36,6 +41,8 @@ func GetApp() *mux.Router {
 	r.HandleFunc("/keys", func(writer http.ResponseWriter, request *http.Request) {
 		data := make(map[string][]string)
 		data["keys"] = []string{}
+		mu.Lock()
+		defer mu.Unlock()
 		for key := range store {
 			data["keys"] = append(data["keys"], key)
 		}
@@ -47,7 +54,10 @@ func GetApp() *mux.Router {
 	// GET BY KEY
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
 		key := request.URL.Query()["key"][0]
+
+		mu.Lock()
 		val, found := store[key]
+		mu.Unlock()
 
 		if !found {
 			log.Println("Val not found")
@@ -69,7 +79,10 @@ func GetApp() *mux.Router {
 	// DELETE BY KEY
 	r.HandleFunc("/key/:key", func(writer http.ResponseWriter, request *http.Request) {
 		key := request.URL.Query()["key"][0]
+		mu.Lock()
 		delete(store, key)
+		mu.Unlock()
+
 		writer.WriteHeader(http.StatusOK)
 	}).Methods("DELETE")
 	return r
