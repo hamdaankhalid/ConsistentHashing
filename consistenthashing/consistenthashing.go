@@ -15,6 +15,8 @@ import (
 type HashingFunc func(string) int
 
 type ConsistentHashing struct {
+	sync.Mutex
+
 	// These routes are the endpoints exposed by every server in cluster to move data around during redistribution
 	allKeysRoute, removeKeyRoute, addKeyRoute, getKeyRoute string
 	hashFunc                                               HashingFunc

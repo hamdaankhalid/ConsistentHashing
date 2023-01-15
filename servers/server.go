@@ -61,9 +61,10 @@ func GetApp() *mux.Router {
 
 		if !found {
 			log.Println("Val not found")
-			writer.WriteHeader(http.StatusInternalServerError)
+			writer.WriteHeader(http.StatusNotFound)
 			return
 		}
+
 		data := make(map[string]string)
 		data["key"] = key
 		data["value"] = val

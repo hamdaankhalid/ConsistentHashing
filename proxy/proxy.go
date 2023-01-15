@@ -9,12 +9,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 )
 
 func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 	r := mux.NewRouter()
-	var hmpMu sync.Mutex
 
 	// UPLOAD KEY VAL
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
@@ -32,9 +30,9 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		data := make(map[string]string)
 
 		_ = json.Unmarshal(buf, &data)
-		hmpMu.Lock()
+		hmp.Lock()
 		shard, err := hmp.GetShard(data["key"])
-		hmpMu.Unlock()
+		hmp.Unlock()
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
@@ -48,28 +46,23 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 	// GET BY KEY
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
 		log.Println("Get Key Request")
-
-		key := request.URL.Query()["key"][0]
-		log.Println(key)
-		hmpMu.Lock()
-		shard, err := hmp.GetShard(key)
-		hmpMu.Unlock()
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		// Proxy
-		url := fmt.Sprintf("%s://%s%s", "http", shard, request.RequestURI)
-		proxyRequest(writer, request, url)
+		relayForKeyBasedRequest(writer, request, hmp)
 	}).Methods(http.MethodGet)
 
-	// Add member
+	// DELETE BY KEY
+	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
+		log.Println("Delete Key Request")
+		relayForKeyBasedRequest(writer, request, hmp)
+	}).Methods(http.MethodDelete)
+
+	// Cluster Management APIs are all get requests, that let you interact with and mutate cluster membership changes
+
+	// Add cluster member
 	r.HandleFunc("/add-member", func(writer http.ResponseWriter, request *http.Request) {
 		log.Println("Add member Request")
 
 		servers := request.URL.Query()["srv"]
-		hmpMu.Lock()
+		hmp.Lock()
 		for _, server := range servers {
 			err := hmp.AddMember(server)
 			if err != nil {
@@ -80,16 +73,16 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 
 		log.Println("----Topology----")
 		hmp.PrintTopology()
-		hmpMu.Unlock()
+		hmp.Unlock()
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
 
-	// Remove member
+	// Remove cluster member
 	r.HandleFunc("/remove-member", func(writer http.ResponseWriter, request *http.Request) {
 		log.Println("Remove member Request")
 
 		servers := request.URL.Query()["srv"]
-		hmpMu.Lock()
+		hmp.Lock()
 
 		for _, server := range servers {
 			hmp.RemoveMember(server)
@@ -98,12 +91,28 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		log.Println("----Topology----")
 		hmp.PrintTopology()
 
-		hmpMu.Unlock()
+		hmp.Unlock()
 
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
 
 	return r
+}
+
+func relayForKeyBasedRequest(writer http.ResponseWriter, request *http.Request, hmp *consistenthashing.ConsistentHashing) {
+	key := request.URL.Query()["key"][0]
+	log.Println(key)
+	hmp.Lock()
+	shard, err := hmp.GetShard(key)
+	hmp.Unlock()
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Proxy
+	url := fmt.Sprintf("%s://%s%s", "http", shard, request.RequestURI)
+	proxyRequest(writer, request, url)
 }
 
 func proxyRequest(w http.ResponseWriter, req *http.Request, newUrl string) {

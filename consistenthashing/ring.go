@@ -2,7 +2,6 @@ package consistenthashing
 
 import "errors"
 
-// ringMember is a glorified circularly ringed list
 type ringMember struct {
 	address string
 	// position is decided by hashing address
