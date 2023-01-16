@@ -47,6 +47,8 @@ GetShard will find the first server where the shardKey's mapped keyId is greater
 next server while satisfying circular ring constraints
 */
 func (ch *ConsistentHashing) GetShard(shardKey string) (string, error) {
+	ch.Lock()
+	defer ch.Unlock()
 	keyPos := ch.hashFunc(shardKey) % ch.ringSize
 	log.Printf("Getting owning server for key with pos: %d \n", keyPos)
 	owner, err := ch.ring.getOwner(keyPos)
@@ -65,6 +67,9 @@ a new server entity between the previous server and then server containing the v
 id/position.
 */
 func (ch *ConsistentHashing) AddMember(serverAddr string) error {
+	ch.Lock()
+	defer ch.Unlock()
+
 	log.Println("Adding new server to cluster members")
 
 	nodePos := ch.hashFunc(serverAddr) % ch.ringSize
@@ -93,7 +98,10 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 }
 
 func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
+	ch.Lock()
+	defer ch.Unlock()
 	removeIdx := ch.ring.find(serverAddr)
+
 	if removeIdx == -1 {
 		return errors.New("so server with address in cluster")
 	}
@@ -121,6 +129,8 @@ func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 }
 
 func (ch *ConsistentHashing) PrintTopology() {
+	ch.Lock()
+	defer ch.Unlock()
 	log.Println("----Topology----")
 	for idx, member := range ch.ring.partitionsRing {
 		log.Printf("idx %d: server %s with pos %d\n", idx, member.address, member.position)

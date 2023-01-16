@@ -23,6 +23,8 @@ func GetApp() *mux.Router {
 
 	// UPLOAD KEY VAL
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		data := uploadReq{}
 		_ = json.NewDecoder(request.Body).Decode(&data)
 
@@ -30,8 +32,6 @@ func GetApp() *mux.Router {
 		value := data.Value
 
 		log.Println("Upload Req: ", data)
-		mu.Lock()
-		defer mu.Unlock()
 		store[key] = value
 
 		writer.WriteHeader(http.StatusCreated)
@@ -39,10 +39,10 @@ func GetApp() *mux.Router {
 
 	// GET ALL KEYS
 	r.HandleFunc("/keys", func(writer http.ResponseWriter, request *http.Request) {
-		data := make(map[string][]string)
-		data["keys"] = []string{}
 		mu.Lock()
 		defer mu.Unlock()
+		data := make(map[string][]string)
+		data["keys"] = []string{}
 		for key := range store {
 			data["keys"] = append(data["keys"], key)
 		}
@@ -53,11 +53,11 @@ func GetApp() *mux.Router {
 
 	// GET BY KEY
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		key := request.URL.Query()["key"][0]
 
-		mu.Lock()
 		val, found := store[key]
-		mu.Unlock()
 
 		if !found {
 			log.Println("Val not found")
@@ -79,11 +79,11 @@ func GetApp() *mux.Router {
 
 	// DELETE BY KEY
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		key := request.URL.Query()["key"][0]
 		log.Printf("Deleting key %s \n", key)
-		mu.Lock()
 		delete(store, key)
-		mu.Unlock()
 
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodDelete)

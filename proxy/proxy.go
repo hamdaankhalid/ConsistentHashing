@@ -30,9 +30,7 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		data := make(map[string]string)
 
 		_ = json.Unmarshal(buf, &data)
-		hmp.Lock()
 		shard, err := hmp.GetShard(data["key"])
-		hmp.Unlock()
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
@@ -62,7 +60,6 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		log.Println("Add member Request")
 
 		servers := request.URL.Query()["srv"]
-		hmp.Lock()
 		for _, server := range servers {
 			err := hmp.AddMember(server)
 			if err != nil {
@@ -72,7 +69,6 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		}
 
 		hmp.PrintTopology()
-		hmp.Unlock()
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
 
@@ -81,15 +77,12 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		log.Println("Remove member Request")
 
 		servers := request.URL.Query()["srv"]
-		hmp.Lock()
 
 		for _, server := range servers {
 			hmp.RemoveMember(server)
 		}
 
 		hmp.PrintTopology()
-
-		hmp.Unlock()
 
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodGet)
@@ -99,10 +92,8 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 
 func relayForKeyBasedRequest(writer http.ResponseWriter, request *http.Request, hmp *consistenthashing.ConsistentHashing) {
 	key := request.URL.Query()["key"][0]
-	log.Println(key)
-	hmp.Lock()
+
 	shard, err := hmp.GetShard(key)
-	hmp.Unlock()
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
 		return

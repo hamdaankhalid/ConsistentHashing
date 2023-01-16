@@ -1,6 +1,8 @@
 package loadtesting
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"log"
 	"math/rand"
@@ -9,25 +11,20 @@ import (
 )
 
 type keyVal struct {
-	key, val string
+	Key, Value string
 }
 
 /*
-Run is preceded by a static pool of node servers being instantiated and being up and running
+Run must be preceded by a static pool of node servers, and the master server being up and running.
 */
 func Run(dataPoints int, master string, nodes []string) {
-	// read through upload data file and upload all data to
-	// cluster while we read through our data and insert via
-	// master we randomly introduce adding and removing of
-	// nodes from cluster we also randomly query key value in
-	// the iteration
 	activeNodes, inactiveNodes := setup(master, nodes)
-
+	log.Println("Initial Active Nodes: ", activeNodes)
+	log.Println("Initial In-active Nodes: ", inactiveNodes)
 	var uploaded []keyVal
 	for i := 0; i < dataPoints; i++ {
-		// At each point we are uploading a random key val string pair
 		kv := keyVal{randSeq(8), randSeq(8)}
-		err := upload(master, kv)
+		err := upload(master, &kv)
 		if err != nil {
 			log.Printf("Fail: error during upload key val %s \n", err.Error())
 			continue
@@ -62,15 +59,19 @@ func Run(dataPoints int, master string, nodes []string) {
 		if len(uploaded) > 0 && rand.Intn(100) > 50 {
 			keyValIdx := rand.Intn(len(uploaded))
 			candidate := uploaded[keyValIdx]
-			result, err := getKey(master, candidate.key)
+			result, err := getKey(master, candidate.Key)
 			if err != nil {
 				log.Printf("Fail: error during get key %s \n", err.Error())
+				continue
 			}
 
-			if !reflect.DeepEqual(candidate, result) {
-				log.Printf("Fail: Expect %v, Got %v \n", candidate, result)
+			if !reflect.DeepEqual(candidate, *result) {
+				log.Printf("Fail: Expect %v, Got %v \n", candidate, *result)
 			}
 		}
+
+		log.Println("Active Nodes: ", activeNodes)
+		log.Println("In-active Nodes: ", inactiveNodes)
 	}
 }
 
@@ -78,10 +79,10 @@ func setup(master string, nodes []string) ([]string, []string) {
 	var activeNodes []string
 	// active nodes start with an arbitrary number of nodes being added
 	// num between 1 and len(nodes)
-	initNumServers := rand.Intn(len(nodes)) + 1 // TODO: CHECK THIS OFF BY ONE
+	initNumServers := rand.Intn(len(nodes)) + 1
 	for i := 0; i < initNumServers; i++ {
-		// select random number in range
-		candidateIdx := rand.Intn(len(nodes) - 1)
+		// select random number in range 0, to last idx of nodes that have not been added already
+		candidateIdx := rand.Intn(len(nodes))
 		selectedNode := nodes[candidateIdx]
 		err := addServer(master, selectedNode)
 		if err != nil {
@@ -91,7 +92,7 @@ func setup(master string, nodes []string) ([]string, []string) {
 		// remove selectedNode from nodes
 		nodes = append(nodes[:candidateIdx], nodes[candidateIdx+1:]...)
 	}
-	// nodes that remain in initial nodes are inactive
+	// nodes that remain in initial nodes list are inactive/unselected for initial configuration
 	inactiveNodes := nodes
 	return activeNodes, inactiveNodes
 }
@@ -104,6 +105,7 @@ func addServer(master string, addr string) error {
 		return err
 	}
 
+	log.Println("Add server status ", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		return errors.New("failed to add server got")
 	}
@@ -118,6 +120,7 @@ func removeServer(master string, addr string) error {
 		return err
 	}
 
+	log.Println("Remove server status ", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		return errors.New("failed to remove server data got")
 	}
@@ -125,15 +128,45 @@ func removeServer(master string, addr string) error {
 	return nil
 }
 
-// TODO
-func upload(master string, kv keyVal) error {
+func upload(master string, kv *keyVal) error {
+	data, err := json.Marshal(kv)
+	if err != nil {
+		return err
+	}
+
 	url := "http://" + master + "/key"
-	http.Post(url)
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+
+	if err != nil {
+		return err
+	}
+	log.Println("Upload status ", resp.StatusCode)
+	if resp.StatusCode != http.StatusCreated {
+		return errors.New("upload request failed")
+	}
+
 	return nil
 }
 
-func getKey(master string, key string) (keyVal, error) {
-	return keyVal{}, nil
+func getKey(master string, key string) (*keyVal, error) {
+	result := &keyVal{}
+	url := "http://" + master + "/key?key=" + key
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	log.Println("Get status ", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("get request failed")
+	}
+	defer resp.Body.Close()
+
+	err = json.NewDecoder(resp.Body).Decode(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func randSeq(n int) string {

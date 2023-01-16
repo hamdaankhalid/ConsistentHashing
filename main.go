@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/gorilla/mux"
 	"github.com/hamdaankhalid/consistenthashing/consistenthashing"
+	"github.com/hamdaankhalid/consistenthashing/loadtesting"
 	"github.com/hamdaankhalid/consistenthashing/proxy"
 	"github.com/hamdaankhalid/consistenthashing/servers"
 	"hash/fnv"
@@ -18,7 +19,6 @@ func main() {
 			h.Write([]byte(s))
 			return int(h.Sum32())
 		}
-
 		hmp := consistenthashing.New(
 			"/keys",
 			"/key",
@@ -30,6 +30,11 @@ func main() {
 		r = proxy.New(hmp)
 	} else if os.Args[2] == "node" {
 		r = servers.GetApp()
+	} else if os.Args[1] == "test" {
+		masterAddress := os.Args[2]
+		nodes := os.Args[3:]
+		loadtesting.Run(100, masterAddress, nodes)
+		return
 	}
 
 	http.ListenAndServe(":"+os.Args[1], r)
