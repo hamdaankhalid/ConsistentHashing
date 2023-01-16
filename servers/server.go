@@ -35,7 +35,7 @@ func GetApp() *mux.Router {
 		store[key] = value
 
 		writer.WriteHeader(http.StatusCreated)
-	}).Methods("POST")
+	}).Methods(http.MethodPost)
 
 	// GET ALL KEYS
 	r.HandleFunc("/keys", func(writer http.ResponseWriter, request *http.Request) {
@@ -49,7 +49,7 @@ func GetApp() *mux.Router {
 		body, _ := json.Marshal(data)
 		writer.WriteHeader(http.StatusOK)
 		writer.Write(body)
-	}).Methods("GET")
+	}).Methods(http.MethodGet)
 
 	// GET BY KEY
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
@@ -75,16 +75,17 @@ func GetApp() *mux.Router {
 
 		writer.WriteHeader(http.StatusOK)
 		writer.Write(resp)
-	}).Methods("GET")
+	}).Methods(http.MethodGet)
 
 	// DELETE BY KEY
-	r.HandleFunc("/key/:key", func(writer http.ResponseWriter, request *http.Request) {
+	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
 		key := request.URL.Query()["key"][0]
+		log.Printf("Deleting key %s \n", key)
 		mu.Lock()
 		delete(store, key)
 		mu.Unlock()
 
 		writer.WriteHeader(http.StatusOK)
-	}).Methods("DELETE")
+	}).Methods(http.MethodDelete)
 	return r
 }

@@ -71,7 +71,6 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 			}
 		}
 
-		log.Println("----Topology----")
 		hmp.PrintTopology()
 		hmp.Unlock()
 		writer.WriteHeader(http.StatusOK)
@@ -88,7 +87,6 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 			hmp.RemoveMember(server)
 		}
 
-		log.Println("----Topology----")
 		hmp.PrintTopology()
 
 		hmp.Unlock()

@@ -20,9 +20,6 @@ func (r *ring) insert(newNode *ringMember) int {
 			insertionIdx = idx + 1
 		}
 	}
-	if insertionIdx != 0 {
-		insertionIdx = insertionIdx % len(r.partitionsRing)
-	}
 
 	leftPart := r.partitionsRing[:insertionIdx]
 	rightPart := r.partitionsRing[insertionIdx:]
@@ -67,13 +64,11 @@ func (r *ring) getOwner(dataPos int) (*ringMember, error) {
 	}
 
 	var pre int
-	for idx, member := range r.partitionsRing {
-		if dataPos < member.position {
-			pre = idx
-		}
+	for pre < len(r.partitionsRing) && dataPos > r.partitionsRing[pre].position {
+		pre++
 	}
 
-	return r.getNextRingMember(pre), nil
+	return r.partitionsRing[pre%len(r.partitionsRing)], nil
 }
 
 func (r *ring) numServers() int {

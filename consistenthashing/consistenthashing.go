@@ -47,11 +47,14 @@ GetShard will find the first server where the shardKey's mapped keyId is greater
 next server while satisfying circular ring constraints
 */
 func (ch *ConsistentHashing) GetShard(shardKey string) (string, error) {
-	keyId := ch.hashFunc(shardKey) % ch.ringSize
-	owner, err := ch.ring.getOwner(keyId)
+	keyPos := ch.hashFunc(shardKey) % ch.ringSize
+	log.Printf("Getting owning server for key with pos: %d \n", keyPos)
+	owner, err := ch.ring.getOwner(keyPos)
 	if err != nil {
 		return "", err
 	}
+	log.Printf("Owner: %v \n", owner)
+
 	return owner.address, nil
 }
 
@@ -118,9 +121,11 @@ func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 }
 
 func (ch *ConsistentHashing) PrintTopology() {
+	log.Println("----Topology----")
 	for idx, member := range ch.ring.partitionsRing {
 		log.Printf("idx %d: server %s with pos %d\n", idx, member.address, member.position)
 	}
+	log.Println("---------------")
 }
 
 func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRemoval bool) error {
@@ -133,7 +138,7 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 	if err != nil {
 		return err
 	}
-	fmt.Println("redistributing: ", decodedResp, "to ", to)
+	fmt.Println("redistributing: ", decodedResp, " from ", from, " to ", to)
 
 	var wg sync.WaitGroup
 	for _, key := range decodedResp.Keys {
@@ -145,13 +150,14 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 				client := &http.Client{}
 
 				// Get Key Val from fromMem
-				resp, err := client.Get("http://" + from.address + getKeyRoute + "?key=" + key)
+				getKeyUrl := "http://" + from.address + getKeyRoute + "?key=" + key
+				resp, err := client.Get(getKeyUrl)
 				if err != nil {
 					log.Println(err)
 					return
 				}
 				if resp.StatusCode != http.StatusOK {
-					log.Print("Get key response unsuccessful")
+					log.Printf("Get key response unsuccessful got %d for request to %s \n", resp.StatusCode, getKeyUrl)
 					return
 				}
 				buf, err := io.ReadAll(resp.Body)
@@ -170,7 +176,8 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 				}
 
 				// remove key val from fromMem
-				req, err := http.NewRequest("http://"+http.MethodDelete, from.address+removeKeyRoute, nil)
+				removeUrl := "http://" + from.address + removeKeyRoute + "?key=" + key
+				req, err := http.NewRequest(http.MethodDelete, removeUrl, nil)
 				if err != nil {
 					log.Println(err)
 					return
@@ -181,7 +188,7 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 					return
 				}
 				if resp.StatusCode != http.StatusOK {
-					log.Print("Delete response unsuccessful")
+					log.Printf("Delete response unsuccessful got %d on request to %s \n", resp.StatusCode, removeUrl)
 					return
 				}
 			}(&wg, key, ch.removeKeyRoute, ch.addKeyRoute, ch.getKeyRoute)
