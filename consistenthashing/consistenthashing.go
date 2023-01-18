@@ -103,7 +103,7 @@ func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 	removeIdx := ch.ring.find(serverAddr)
 
 	if removeIdx == -1 {
-		return errors.New("so server with address in cluster")
+		return errors.New("no server with address in cluster")
 	}
 
 	// move everything from current node into the next node
@@ -152,17 +152,19 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 
 	var wg sync.WaitGroup
 	for _, key := range decodedResp.Keys {
-		keyId := ch.hashFunc(key)
+		keyId := ch.hashFunc(key) % ch.ringSize
 		if keyId < to.position || isRemoval {
 			wg.Add(1)
 			go func(wg *sync.WaitGroup, key string, removeKeyRoute string, addKeyRoute string, getKeyRoute string) {
 				defer wg.Done()
+
 				client := &http.Client{}
 
 				// Get Key Val from fromMem
 				getKeyUrl := "http://" + from.address + getKeyRoute + "?key=" + key
 				resp, err := client.Get(getKeyUrl)
 				if err != nil {
+					log.Println("Error getting key")
 					log.Println(err)
 					return
 				}
@@ -177,6 +179,7 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 				// Add key val to toMem
 				resp, err = client.Post("http://"+to.address+addKeyRoute, resp.Header.Get("Content-Type"), respBody)
 				if err != nil {
+					log.Println("Error adding key")
 					log.Println(err)
 					return
 				}
