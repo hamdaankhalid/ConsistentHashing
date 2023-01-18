@@ -41,6 +41,7 @@ func GetApp() *mux.Router {
 	r.HandleFunc("/keys", func(writer http.ResponseWriter, request *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		
 		data := make(map[string][]string)
 		data["keys"] = []string{}
 		for key := range store {
@@ -55,6 +56,9 @@ func GetApp() *mux.Router {
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+
+		log.Println("RequestURL: ", request.URL.Query()["key"])
+
 		key := request.URL.Query()["key"][0]
 
 		val, found := store[key]
@@ -81,6 +85,9 @@ func GetApp() *mux.Router {
 	r.HandleFunc("/key", func(writer http.ResponseWriter, request *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+
+		log.Println("RequestURL: ", request.URL.Query()["key"])
+
 		key := request.URL.Query()["key"][0]
 		log.Printf("Deleting key %s \n", key)
 		delete(store, key)

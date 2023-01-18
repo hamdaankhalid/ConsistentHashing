@@ -30,11 +30,14 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		data := make(map[string]string)
 
 		_ = json.Unmarshal(buf, &data)
-		shard, err := hmp.GetShard(data["key"])
+
+		shard, err := hmp.GetShard(data["Key"])
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		log.Printf("Upload for key %s \n", data["Key"])
 
 		// Proxy
 		url := fmt.Sprintf("%s://%s%s", "http", shard, request.RequestURI)
