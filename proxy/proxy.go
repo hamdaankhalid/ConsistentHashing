@@ -79,7 +79,10 @@ func New(hmp *consistenthashing.ConsistentHashing) *mux.Router {
 		servers := request.URL.Query()["srv"]
 
 		for _, server := range servers {
-			hmp.RemoveMember(server)
+			err := hmp.RemoveMember(server)
+			if err != nil {
+				log.Println("Failed to remove member")
+			}
 		}
 
 		hmp.PrintTopology()
