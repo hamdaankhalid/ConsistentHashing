@@ -41,7 +41,7 @@ func GetApp() *mux.Router {
 	r.HandleFunc("/keys", func(writer http.ResponseWriter, request *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		
+
 		data := make(map[string][]string)
 		data["keys"] = []string{}
 		for key := range store {
@@ -78,7 +78,7 @@ func GetApp() *mux.Router {
 		resp, _ := json.Marshal(data)
 
 		writer.WriteHeader(http.StatusOK)
-		writer.Write(resp)
+		_, _ = writer.Write(resp)
 	}).Methods(http.MethodGet)
 
 	// DELETE BY KEY

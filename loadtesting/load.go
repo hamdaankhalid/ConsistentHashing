@@ -59,6 +59,7 @@ func Run(dataPoints int, master string, nodes []string) {
 		if len(uploaded) > 0 && rand.Intn(100) > 50 {
 			keyValIdx := rand.Intn(len(uploaded))
 			candidate := uploaded[keyValIdx]
+
 			result, err := getKey(master, candidate.Key)
 			if err != nil {
 				log.Printf("Fail: error during get key %s \n", err.Error())
@@ -149,6 +150,7 @@ func upload(master string, kv *keyVal) error {
 }
 
 func getKey(master string, key string) (*keyVal, error) {
+	log.Printf("Trying to get %s \n", key)
 	result := &keyVal{}
 	url := "http://" + master + "/key?key=" + key
 	resp, err := http.Get(url)

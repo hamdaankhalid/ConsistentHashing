@@ -100,7 +100,10 @@ func (ch *ConsistentHashing) AddMember(serverAddr string) error {
 func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 	ch.Lock()
 	defer ch.Unlock()
+
 	removeIdx := ch.ring.find(serverAddr)
+
+	log.Printf("Removing %s server from idx %d \n", serverAddr, removeIdx)
 
 	if removeIdx == -1 {
 		return errors.New("no server with address in cluster")
@@ -111,11 +114,12 @@ func (ch *ConsistentHashing) RemoveMember(serverAddr string) error {
 	if err != nil {
 		return err
 	}
+
 	successor := ch.ring.getNextRingMember(removeIdx)
 
 	err = ch.redistribute(currNode, successor, true)
 	if err != nil {
-		log.Println(err)
+		log.Printf("Error redistributing %s \n", err.Error())
 		return err
 	}
 
@@ -148,12 +152,18 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 	if err != nil {
 		return err
 	}
-	fmt.Println("redistributing: ", decodedResp, " from ", from, " to ", to)
+	fmt.Println("redistributing from ", from, ", to ", to)
 
 	var wg sync.WaitGroup
 	for _, key := range decodedResp.Keys {
 		keyId := ch.hashFunc(key) % ch.ringSize
-		if keyId < to.position || isRemoval {
+		correctPlacement, err := ch.ring.getOwner(keyId)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if (correctPlacement.address == to.address) || isRemoval {
+			log.Println("Moving key ", key, " from ", from, ", to ", to)
 			wg.Add(1)
 			go func(wg *sync.WaitGroup, key string, removeKeyRoute string, addKeyRoute string, getKeyRoute string) {
 				defer wg.Done()

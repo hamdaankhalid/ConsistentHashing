@@ -54,7 +54,7 @@ func (r *ring) remove(idx int) error {
 		return errors.New("invalid argument range")
 	}
 
-	r.partitionsRing = append(r.partitionsRing[0:idx], r.partitionsRing[idx+1:]...)
+	r.partitionsRing = append(r.partitionsRing[:idx], r.partitionsRing[idx+1:]...)
 	return nil
 }
 
