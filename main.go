@@ -11,6 +11,21 @@ import (
 	"os"
 )
 
+/*
+Usage:
+To run test demo
+
+INSTANTIATE NODE SERVERS
+go run main.go 8040 node
+go run main.go 8060 node
+go run main.go 8080 node
+
+INSTANTIATE PROXY SERVER
+go run main.go 8020 proxy
+
+SET-OFF DEMO TEST
+go run main.go test localhost:8020 localhost:8040 localhost:8060 localhost:8080
+*/
 func main() {
 	var r *mux.Router
 	if os.Args[2] == "proxy" {
@@ -37,5 +52,8 @@ func main() {
 		return
 	}
 
-	http.ListenAndServe(":"+os.Args[1], r)
+	err := http.ListenAndServe(":"+os.Args[1], r)
+	if err != nil {
+		return
+	}
 }
