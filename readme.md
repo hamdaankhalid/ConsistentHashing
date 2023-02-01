@@ -40,6 +40,13 @@ Client <---- Proxy          Node server B
 The proxy maintains the algorithm. All the nodes are mapped onto the consistent hashing ring. The proxy is not a part of
 the ring. It is the one that controls additions, and subtractions from this ring.
 
-![nodes in consistent hashing rin](https://www.researchgate.net/publication/236149101/figure/fig6/AS:669985961672724@1536748509654/Figure-Consistent-hashing-maps-nodes-and-data-items-into-the-same-ring-for.png)
+![nodes in consistent hashing ring](https://www.researchgate.net/publication/236149101/figure/fig6/AS:669985961672724@1536748509654/Figure-Consistent-hashing-maps-nodes-and-data-items-into-the-same-ring-for.png)
 
 Incoming requests have a sharding key attached to it
+
+## Bottlenecks
+If your proxy is really being choked by large upload get requests -> implement DSR (Direct server return) although in 
+most request response system proxies are not the bottleneck. The proxy is IO intensive and not cpu intensive, working 
+with state can often be cpu intensive so separating the components into proxy and node servers does not usually cause
+choking issues. The proxy could also be implemented in the form of a client library that creates a logical proxy and not
+its own separate process altogether.
