@@ -1,4 +1,4 @@
-package loadtesting
+package systemtesting
 
 import (
 	"bytes"

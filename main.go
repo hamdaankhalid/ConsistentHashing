@@ -3,9 +3,9 @@ package main
 import (
 	"github.com/gorilla/mux"
 	"github.com/hamdaankhalid/consistenthashing/consistenthashing"
-	"github.com/hamdaankhalid/consistenthashing/loadtesting"
 	"github.com/hamdaankhalid/consistenthashing/proxy"
 	"github.com/hamdaankhalid/consistenthashing/servers"
+	"github.com/hamdaankhalid/consistenthashing/systemtesting"
 	"hash/fnv"
 	"net/http"
 	"os"
@@ -48,7 +48,7 @@ func main() {
 	} else if os.Args[1] == "test" {
 		masterAddress := os.Args[2]
 		nodes := os.Args[3:]
-		loadtesting.Run(100, masterAddress, nodes)
+		systemtesting.Run(100, masterAddress, nodes)
 		return
 	}
 
