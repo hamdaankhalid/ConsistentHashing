@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -18,6 +19,7 @@ type keyVal struct {
 Run must be preceded by a static pool of node servers, and the master server being up and running.
 */
 func Run(dataPoints int, master string, nodes []string) {
+	// Interact with master server's membership apis and add a select few nodes from our activeNodes as initial nodes
 	activeNodes, inactiveNodes := setup(master, nodes)
 	log.Println("Initial Active Nodes: ", activeNodes)
 	log.Println("Initial In-active Nodes: ", inactiveNodes)
@@ -161,7 +163,9 @@ func getKey(master string, key string) (*keyVal, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New("get request failed")
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 
 	err = json.NewDecoder(resp.Body).Decode(result)
 	if err != nil {

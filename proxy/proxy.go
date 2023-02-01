@@ -129,8 +129,8 @@ func proxyRequest(w http.ResponseWriter, req *http.Request, newUrl string) {
 
 	copyHeader(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
-	resp.Body.Close()
+	_, _ = io.Copy(w, resp.Body)
+	_ = resp.Body.Close()
 }
 
 func copyHeader(dst, src http.Header) {

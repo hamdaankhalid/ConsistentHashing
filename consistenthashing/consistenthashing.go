@@ -183,7 +183,7 @@ func (ch *ConsistentHashing) redistribute(from *ringMember, to *ringMember, isRe
 					return
 				}
 				buf, err := io.ReadAll(resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				respBody := bytes.NewBuffer(buf)
 
 				// Add key val to toMem

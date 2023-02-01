@@ -31,7 +31,7 @@ func main() {
 	if os.Args[2] == "proxy" {
 		hash := func(s string) int {
 			h := fnv.New32a()
-			h.Write([]byte(s))
+			_, _ = h.Write([]byte(s))
 			return int(h.Sum32())
 		}
 		hmp := consistenthashing.New(

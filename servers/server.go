@@ -49,7 +49,7 @@ func GetApp() *mux.Router {
 		}
 		body, _ := json.Marshal(data)
 		writer.WriteHeader(http.StatusOK)
-		writer.Write(body)
+		_, _ = writer.Write(body)
 	}).Methods(http.MethodGet)
 
 	// GET BY KEY
@@ -94,5 +94,6 @@ func GetApp() *mux.Router {
 
 		writer.WriteHeader(http.StatusOK)
 	}).Methods(http.MethodDelete)
+
 	return r
 }
